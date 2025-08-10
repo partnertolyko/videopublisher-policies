@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OAuth Callback — VideoPublisher</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; color: #111; }
+    .ok { color: #0a7a0a; }
+    .err { color: #b00020; }
+    code { background: #f6f8fa; padding: .2rem .4rem; border-radius: 4px; }
+    .box { background:#fafafa; border:1px solid #e5e7eb; border-radius:8px; padding:1rem; margin-top:1rem;}
+    small { color:#6b7280; }
+  </style>
+</head>
+<body>
+  <h1>Возврат из TikTok</h1>
+  <p id="status">Обрабатываю параметры…</p>
+
+  <div class="box">
+    <div><strong>code:</strong> <code id="code">—</code></div>
+    <div><strong>state:</strong> <code id="state">—</code></div>
+    <div><strong>error:</strong> <code id="error">—</code></div>
+    <div><strong>error_description:</strong> <code id="error_description">—</code></div>
+  </div>
+
+  <p><small>Эту вкладку можно закрыть.</small></p>
+
+  <script>
+    (function () {
+      // Собираем параметры из query и hash (на всякий случай)
+      const params = new URLSearchParams(window.location.search || '');
+      const hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+      for (const [k, v] of hash) if (!params.has(k)) params.set(k, v);
+
+      const data = {
+        provider: 'tiktok',
+        code: params.get('code') || null,
+        state: params.get('state') || null,
+        error: params.get('error') || null,
+        error_description: params.get('error_description') || null,
+        raw: Object.fromEntries(params.entries()),
+      };
+
+      // Пишем на экран
+      for (const key of ['code','state','error','error_description']) {
+        const el = document.getElementById(key);
+        if (el) el.textContent = data[key] ?? '—';
+      }
+
+      const ok = !!data.code && !data.error;
+      const status = document.getElementById('status');
+      status.textContent = ok ? 'Получен authorization code.' : 'Ошибка или код не получен.';
+      status.className = ok ? 'ok' : 'err';
+
+      // Для клиента: шлём результат в opener (если это popup)
+      try {
+        if (window.opener && typeof window.opener.postMessage === 'function') {
+          window.opener.postMessage({ type: 'oauth_callback', payload: data }, '*');
+          // Попробуем закрыть окно (браузер может заблокировать — это нормально)
+          setTimeout(() => window.close(), 500);
+        }
+      } catch (e) {
+        console.warn('postMessage failed:', e);
+      }
+
+      // На всякий случай — сохраняем в localStorage, чтобы основное окно смогло прочитать
+      try {
+        localStorage.setItem('oauth_callback_last', JSON.stringify(data));
+      } catch {}
+    })();
+  </script>
+</body>
+</html>
