@@ -2,72 +2,122 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OAuth Callback — VideoPublisher</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Возврат из TikTok</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 2rem; color: #111; }
-    .ok { color: #0a7a0a; }
-    .err { color: #b00020; }
-    code { background: #f6f8fa; padding: .2rem .4rem; border-radius: 4px; }
-    .box { background:#fafafa; border:1px solid #e5e7eb; border-radius:8px; padding:1rem; margin-top:1rem;}
-    small { color:#6b7280; }
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      margin: 0; padding: 24px;
+      background: #0b0c0f; color: #e7e7e7;
+    }
+    .card {
+      max-width: 1100px; margin: 0 auto;
+      background: #121318; border: 1px solid #2a2c36; border-radius: 14px;
+      padding: 24px; box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    }
+    h1 { margin: 0 0 12px; font-size: 28px; }
+    .ok    { color: #60d394; }
+    .warn  { color: #f7b955; }
+    .err   { color: #ff6b6b; }
+    .kv { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; }
+    .k  { color:#9aa0aa; }
+    .v  { word-break: break-all; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .row { margin-top: 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+    button {
+      appearance: none; border: 1px solid #2d3340; background: #1a1f2b; color:#e7e7e7;
+      padding: 10px 14px; border-radius: 10px; cursor: pointer; font-weight: 600;
+    }
+    button:hover { background: #222739; }
+    .small { font-size: 12px; color:#9aa0aa; margin-top: 10px }
+    .mono  { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .hr    { height:1px; background:#2a2c36; margin:16px 0; }
+    .pill  { display:inline-block; padding:4px 8px; border:1px solid #2a2c36; border-radius:999px; font-size:12px; color:#9aa0aa; }
+    .note  { margin-top:12px; color:#b9bec9; }
+    .urlbox{ width:100%; height:70px; resize:vertical; }
   </style>
 </head>
 <body>
-  <h1>Возврат из TikTok</h1>
-  <p id="status">Обрабатываю параметры…</p>
+  <div class="card">
+    <h1>Возврат из TikTok</h1>
+    <div id="status" class="pill">Жду данные…</div>
 
-  <div class="box">
-    <div><strong>code:</strong> <code id="code">—</code></div>
-    <div><strong>state:</strong> <code id="state">—</code></div>
-    <div><strong>error:</strong> <code id="error">—</code></div>
-    <div><strong>error_description:</strong> <code id="error_description">—</code></div>
+    <div class="hr"></div>
+
+    <div class="kv">
+      <div class="k">code:</div>              <div id="code"  class="v">–</div>
+      <div class="k">state:</div>             <div id="state" class="v">–</div>
+      <div class="k">error:</div>             <div id="error" class="v">–</div>
+      <div class="k">error_description:</div> <div id="errd"  class="v">–</div>
+    </div>
+
+    <div class="row">
+      <button id="copyCode">Скопировать code</button>
+      <button id="copyUrl">Скопировать полный URL</button>
+      <button id="close">Закрыть вкладку</button>
+    </div>
+
+    <p class="small">
+      Если видите <span class="warn">“кода нет”</span> — проверьте совпадение <span class="mono">redirect_uri</span> в Developer Portal и в ссылке авторизации, а также что вы нажали “Продолжить”.
+    </p>
+
+    <div class="hr"></div>
+
+    <div class="note">
+      Полный URL (на всякий случай):
+      <textarea id="fullUrl" class="urlbox mono" readonly></textarea>
+    </div>
   </div>
-
-  <p><small>Эту вкладку можно закрыть.</small></p>
 
   <script>
     (function () {
-      // Собираем параметры из query и hash (на всякий случай)
-      const params = new URLSearchParams(window.location.search || '');
-      const hash = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
-      for (const [k, v] of hash) if (!params.has(k)) params.set(k, v);
+      const qs  = new URLSearchParams(location.search);
+      const code = qs.get('code');
+      const state = qs.get('state');
+      const err  = qs.get('error');
+      const errd = qs.get('error_description');
 
-      const data = {
-        provider: 'tiktok',
-        code: params.get('code') || null,
-        state: params.get('state') || null,
-        error: params.get('error') || null,
-        error_description: params.get('error_description') || null,
-        raw: Object.fromEntries(params.entries()),
-      };
+      const el = id => document.getElementById(id);
+      el('fullUrl').value = location.href;
 
-      // Пишем на экран
-      for (const key of ['code','state','error','error_description']) {
-        const el = document.getElementById(key);
-        if (el) el.textContent = data[key] ?? '—';
+      function setStatus(txt, cls) {
+        const s = el('status'); s.textContent = txt;
+        s.classList.remove('ok','warn','err');
+        if (cls) s.classList.add(cls);
       }
 
-      const ok = !!data.code && !data.error;
-      const status = document.getElementById('status');
-      status.textContent = ok ? 'Получен authorization code.' : 'Ошибка или код не получен.';
-      status.className = ok ? 'ok' : 'err';
+      // Показать значения
+      el('code').textContent  = code  ?? '–';
+      el('state').textContent = state ?? '–';
+      el('error').textContent = err   ?? '–';
+      el('errd').textContent  = errd  ?? '–';
 
-      // Для клиента: шлём результат в opener (если это popup)
+      // Сообщение в опенер (если авторизация в popup-е)
+      const payload = { code, state, error: err, error_description: errd };
       try {
         if (window.opener && typeof window.opener.postMessage === 'function') {
-          window.opener.postMessage({ type: 'oauth_callback', payload: data }, '*');
-          // Попробуем закрыть окно (браузер может заблокировать — это нормально)
-          setTimeout(() => window.close(), 500);
+          window.opener.postMessage({ type: 'tiktok_oauth_callback', payload }, '*');
         }
-      } catch (e) {
-        console.warn('postMessage failed:', e);
-      }
+      } catch (e) { console.warn('postMessage failed', e); }
 
-      // На всякий случай — сохраняем в localStorage, чтобы основное окно смогло прочитать
-      try {
-        localStorage.setItem('oauth_callback_last', JSON.stringify(data));
-      } catch {}
+      if (code && !err) setStatus('Получен authorization code.', 'ok');
+      else if (err)      setStatus('Ошибка или код не получен.', 'err');
+      else               setStatus('Данных нет. Проверьте redirect_uri и повторите.', 'warn');
+
+      // Кнопки
+      el('copyCode').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(code ?? '');
+          setStatus('code скопирован в буфер обмена.', 'ok');
+        } catch { setStatus('Не удалось скопировать code.', 'err'); }
+      };
+      el('copyUrl').onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(location.href);
+          setStatus('URL скопирован в буфер обмена.', 'ok');
+        } catch { setStatus('Не удалось скопировать URL.', 'err'); }
+      };
+      el('close').onclick = () => window.close();
     })();
   </script>
 </body>
